@@ -1,31 +1,26 @@
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
+/**
+ * Renders the Mandelbrot set fractal
+ * @author Alex Spurling
+ *
+ */
+public class Mandelbrot implements Fractal {
 
-public class Mandelbrot {
-	
+	private BufferedImage bufferedImage;
 	private WritableRaster wr;
+	
 	private int width;
 	private int height;
 	
-	private static final int[] gradientA = new int[] {50, 50, 150};
-	private static final int[] gradientB = new int[] {255, 255, 100};
-	
-	
-	private static final List<Color> gradients = new ArrayList<Color>();
-	
-	private static final int numColours = 500;
-	private static int[][] colorTable = new int[numColours][];
+	private Gradient gradient;
+	/** The maximum number of iterations to use for the gradient cycle */
+	private final int MAX_GRAD_ITERATIONS = 500;
 	
 	private double initialWidth;
 	private double initialHeight;
@@ -33,14 +28,12 @@ public class Mandelbrot {
 	private double curXStart;
 	private double curYStart;
 	private long curMagnification = 1;
-	private boolean cancelled;
+	private volatile boolean cancelled;
 	
-	private ExecutorService executor;
+	private volatile ExecutorService executor;
 	
-	public Mandelbrot(WritableRaster wr, int width, int height) {
-		this.wr = wr;
-		this.width = width;
-		this.height = height;
+	public Mandelbrot(int width, int height) {
+		setSize(width, height);
 		
 		//We always have an initial width of 3
 		initialWidth = 3;
@@ -49,27 +42,16 @@ public class Mandelbrot {
 		curXStart = -0.5-initialWidth / 2;
 		curYStart = 0-initialHeight / 2;
 
-		gradients.add(new Color(0, 0, 90)); //Navy
-		gradients.add(new Color(170, 255, 255)); //Light blue
-		gradients.add(new Color(255, 225, 50));  //Yellow
-		gradients.add(new Color(157, 58, 17));  //Brown
-		
-		int curColour = 0;
-		int gradesPerColour = numColours / gradients.size();  
-		for (int grad = 0; grad < gradients.size(); grad++) {
-			Color fromColour = gradients.get(grad);
-			Color toColour = gradients.get((grad+1)%gradients.size());
-			int startIndex = curColour * gradesPerColour;
-			for (int i = startIndex; i < startIndex+gradesPerColour; i++) {
-				int r = fromColour.getRed() + (int) ((toColour.getRed() - fromColour.getRed()) * (i-startIndex) / gradesPerColour);
-				int g = fromColour.getGreen() + (int) ((toColour.getGreen() - fromColour.getGreen()) * (i-startIndex) / gradesPerColour);
-				int b = fromColour.getBlue() + (int) ((toColour.getBlue() - fromColour.getBlue()) * (i-startIndex) / gradesPerColour);
-				colorTable[i] = new int[] {r, g, b};
-			}
-			curColour++;
-		}
+		gradient = new Gradient(MAX_GRAD_ITERATIONS,
+								new Color(0, 0, 90), //Navy
+								new Color(170, 255, 255), //Light blue
+								new Color(255, 225, 50),  //Yellow
+								new Color(157, 58, 17));  //Brown
 	}
 
+	/* (non-Javadoc)
+	 * @see Fractal#drawFractal(double, double, long, int)
+	 */
 	public boolean drawFractal(double xPos, double yPos, long magnification, int iterations) {
 		
 		double xSize = initialWidth / magnification;
@@ -81,31 +63,6 @@ public class Mandelbrot {
 		//Reset the cancel flag before starting
 		cancelled = false;
 		
-		long startTime = System.currentTimeMillis();
-
-		/*
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				int i = 0;
-				double xc = 0;
-				double yc = 0;
-				//Get the coordinates of the x/y point on the complex plane
-				//based on our current top right coordinate (x/yStart), and the
-				//width/height of the screen at the current magnification (x/ySize) 
-				double x0 = xStart + xSize * ((double)x / width);
-				double y0 = yStart + ySize * ((double)y / height);
-				while (xc*xc + yc*yc < 2*2 && i < iterations) {
-					double xtemp = xc*xc - yc*yc;
-				    yc = 2*xc*yc + y0;
-				    xc = xtemp + x0;
-				    i++;
-				}
-				
-				wr.setPixel(x, y, getColor(i, iterations));
-			}
-		}
-		*/
-		System.out.println(executor);
 		executor = Executors.newFixedThreadPool(4);
 		
 		for (int i = 0; i < 4; i++) {
@@ -119,11 +76,9 @@ public class Mandelbrot {
 		try {
 			executor.awaitTermination(10, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
+			System.err.println("Rendering interrupted");
 			e.printStackTrace();
 		}
-		
-		System.out.println(System.currentTimeMillis() - startTime);
 		
 		curXStart = xStart;
 		curYStart = yStart;
@@ -193,26 +148,44 @@ public class Mandelbrot {
 					    i++;
 					}
 					
-					wr.setPixel(x, y, getColor(i, iterations));
+					wr.setPixel(x, y, getColour(i, iterations));
 				}
 			}
 		}
 		
 	}
 	
-	private int[] getColor(int n, int maxN) {
-		//TODO: HOw does ThIs CoLuR coDE woRk?
-		if (n == maxN) return colorTable[0];
-		if (maxN < numColours) return colorTable[(int) ((double)(numColours-1) * n / maxN)];
-		return colorTable[n % numColours];
+	private int[] getColour(int i, int maxIters) {
+		//Calculate the gradient factor
+		//This a value between 0..1 which 
+		double gradientFactor;
+		if (i == maxIters) gradientFactor = 0;
+		else if (maxIters < MAX_GRAD_ITERATIONS) gradientFactor = i / (double)maxIters;
+		else gradientFactor = i % MAX_GRAD_ITERATIONS / (double)MAX_GRAD_ITERATIONS;
+		
+		return gradient.getColor(gradientFactor);
 	}
 
-	public void setSize(int width, int height, WritableRaster wr) {
+	/* (non-Javadoc)
+	 * @see Fractal#setSize(int, int)
+	 */
+	public void setSize(int width, int height) {
 		this.width = width;
 		this.height = height;
-		this.wr = wr;
+		bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+		this.wr = bufferedImage.getRaster();
 	}
 
+	/* (non-Javadoc)
+	 * @see Fractal#getBufferedImage()
+	 */
+	public BufferedImage getBufferedImage() {
+		return bufferedImage;
+	}
+
+	/* (non-Javadoc)
+	 * @see Fractal#cancel()
+	 */
 	public void cancel() {
 		cancelled = true;
 		try {
@@ -221,7 +194,7 @@ public class Mandelbrot {
 				executor = null;
 			}
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
+			System.err.println("Rendering interrupted");
 			e.printStackTrace();
 		}
 	}
