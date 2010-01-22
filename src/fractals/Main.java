@@ -1,3 +1,4 @@
+package fractals;
 
 import java.awt.Canvas;
 import java.awt.Color;
@@ -19,27 +20,6 @@ public class Main {
 	// 3. Allow adjustable colours
 	// 4. Draw low res preview
 	// 5. Make canvas draggable
-	
-	private static FractalExecutor executor;
-	
-	@SuppressWarnings("serial")
-	static class FractalCanvas extends Canvas {
-		private Fractal fractal;
-		
-		public FractalCanvas(Fractal fractal) {
-			this.fractal = fractal;
-		}
-		
-		public void paint(Graphics g) {
-			g.drawImage(fractal.getBufferedImage(), 0, 0, Color.red, null);
-			System.out.println("painted");
-		}
-		
-		@Override
-		public void update(Graphics g) {
-			paint(g);
-		}
-	}
 
 	static public void main(String[] args) {
 		
@@ -59,6 +39,8 @@ public class Main {
 		f.pack();
 		f.setLocationRelativeTo(null);
 		
+		final FractalRenderer executor = new FractalRenderer(canvas, fractal, 600, 500);
+		
 		canvas.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
@@ -75,7 +57,6 @@ public class Main {
 
 			@Override
 			public void componentResized(ComponentEvent e) {
-				System.out.println(e);
 				int width = e.getComponent().getWidth();
 				int height = e.getComponent().getHeight();
 				
@@ -84,18 +65,31 @@ public class Main {
 			
 		});
 		
-		
 		f.setVisible(true);
-		canvas.createBufferStrategy(2);
-		
-
-		executor = new FractalExecutor(canvas, fractal, 600, 500);
 
 		Thread executorThread = new Thread(executor);
 		executorThread.setDaemon(true);
 		executorThread.start();
 
 		canvas.repaint();
+	}
+	
+	@SuppressWarnings("serial")
+	static class FractalCanvas extends Canvas {
+		private Fractal fractal;
+		
+		public FractalCanvas(Fractal fractal) {
+			this.fractal = fractal;
+		}
+		
+		public void paint(Graphics g) {
+			g.drawImage(fractal.getBufferedImage(), 0, 0, Color.red, null);
+		}
+		
+		@Override
+		public void update(Graphics g) {
+			paint(g);
+		}
 	}
 	
 	

@@ -1,3 +1,4 @@
+package fractals;
 import java.awt.image.BufferedImage;
 
 public interface Fractal {

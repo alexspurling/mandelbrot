@@ -1,3 +1,4 @@
+package fractals;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
@@ -54,25 +55,28 @@ public class Mandelbrot implements Fractal {
 	 */
 	public boolean drawFractal(double xPos, double yPos, long magnification, int iterations) {
 		
+		//Calculate the size of the rendering window in complex coordinates
 		double xSize = initialWidth / magnification;
 		double ySize = initialHeight / magnification;
 		
+		//Calculate the top and left points of the rendering window in the complex plane
 		double xStart = curXStart + (initialWidth / curMagnification * xPos/width) - xSize / 2;
 		double yStart = curYStart + (initialHeight / curMagnification * yPos/height) - ySize / 2;
 
 		//Reset the cancel flag before starting
 		cancelled = false;
 		
-		executor = Executors.newFixedThreadPool(4);
+		executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 		
 		for (int i = 0; i < 4; i++) {
 			int x = 0;
 			int y = i * (height / 4);
 			int xLimit = x + width;
 			int yLimit = y + (height / 4);
-			executor.execute(new FractalRenderer(xStart, xSize, yStart, ySize, width, height, x, y, xLimit, yLimit, iterations));
+			executor.execute(new MandelbrotRenderer(xStart, xSize, yStart, ySize, width, height, x, y, xLimit, yLimit, iterations));
 		}
 		executor.shutdown();
+		
 		try {
 			executor.awaitTermination(10, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
@@ -87,7 +91,13 @@ public class Mandelbrot implements Fractal {
 		return !cancelled;
 	}
 	
-	private class FractalRenderer implements Runnable {
+	/**
+	 * Renders a given portion of the Mandelbrot fractal. Implemented
+	 * as a Runnable inner class to allow parallel calculations
+	 * @author Alex Spurling
+	 *
+	 */
+	private class MandelbrotRenderer implements Runnable {
 
 		private double xStart;
 		private double xSize;
@@ -104,7 +114,7 @@ public class Mandelbrot implements Fractal {
 		
 		private int iterations;
 		
-		public FractalRenderer(double xStart, double xSize, double yStart, double ySize, 
+		public MandelbrotRenderer(double xStart, double xSize, double yStart, double ySize, 
 				int width, int height,
 				int x, int y, int xLimit, int yLimit,
 				int iterations) {
@@ -128,10 +138,7 @@ public class Mandelbrot implements Fractal {
 		@Override
 		public void run() {
 			for (int y = yPos; y < yLimit; y++) {
-				if (cancelled) {
-					System.out.println("Cancelled " + xSize);
-					break;
-				}
+				if (cancelled) break;
 				for (int x = xPos; x < xLimit; x++) {
 					int i = 0;
 					double xc = 0;
@@ -157,7 +164,7 @@ public class Mandelbrot implements Fractal {
 	
 	private int[] getColour(int i, int maxIters) {
 		//Calculate the gradient factor
-		//This a value between 0..1 which 
+		//This should be a value between 0..1 
 		double gradientFactor;
 		if (i == maxIters) gradientFactor = 0;
 		else if (maxIters < MAX_GRAD_ITERATIONS) gradientFactor = i / (double)maxIters;

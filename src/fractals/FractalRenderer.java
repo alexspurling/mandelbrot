@@ -1,12 +1,14 @@
+package fractals;
 import java.awt.Canvas;
 
 
 /**
- * The FractalExecutor coordinates and executes events on the Fractal object. 
+ * The FractalRenderer coordinates and executes rendering events 
+ * on the Fractal object. 
  * @author Alex Spurling
  *
  */
-public class FractalExecutor implements Runnable {
+public class FractalRenderer implements Runnable {
 
 	private Fractal fractal;
 	private Canvas canvas;
@@ -17,11 +19,11 @@ public class FractalExecutor implements Runnable {
 	private int iterations = 100;
 	public final Object redrawLock = new Object();
 	
-	//The x and y to centre on
+	//The x and y pixel coordinates to centre on
 	private int x;
 	private int y;
 	
-	public FractalExecutor(Canvas canvas, Fractal fractal, int width, int height) {
+	public FractalRenderer(Canvas canvas, Fractal fractal, int width, int height) {
 		this.canvas = canvas;
 		this.fractal = fractal;
 		resize(width, height);
@@ -68,9 +70,6 @@ public class FractalExecutor implements Runnable {
 	public void run() {
 		while(true) {
 			if (resized) {
-				System.out.println("resizing canvas");
-				//Create a buffered image to store the rendered fractal
-				//I = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 				fractal.setSize(width, height);
 				resized = false;
 			}
